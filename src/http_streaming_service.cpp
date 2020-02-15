@@ -611,7 +611,7 @@ void get_ts_segment_policy(const std::string& key, int64_t* ts_duration_ms,
 
 void HttpStreamingServiceImpl::get_master_playlist(
     google::protobuf::RpcController* cntl_base,
-    const HttpRequest*,
+    const HttpRequest* request,
     HttpResponse*,
     google::protobuf::Closure* done) {
     brpc::ClosureGuard done_guard(done);
@@ -662,7 +662,8 @@ void HttpStreamingServiceImpl::get_master_playlist(
         // (generally inside a CDN node using consistent-hashing LB)
         os << *specified_host;
     } else {
-        os << butil::my_ip() << ':' << port;
+        os << cntl->http_request().uri().host() << ":" << cntl->http_request().uri().port();
+        //os << butil::ip2str(cntl->local_side().ip).c_str() << ':' << port;
     }
     // Remove specified_host from queries which will be after media playlists
     // and visible to users.
@@ -787,7 +788,7 @@ void HttpStreamingServiceImpl::get_media_playlist(
     if (!get_ts_queue({key, started_with_kf_in_ts, ts_duration_ms, ts_num_per_m3u8}, &tsq)) {
         cntl->SetFailed(brpc::ENOMETHOD,
                         "Fail to find TsQueue for key=%s"
-                        ", started_with_kf_in_ts=%d", 
+                        ", started_with_kf_in_ts=%d",
                         key.c_str(), started_with_kf_in_ts);
         return;
     }

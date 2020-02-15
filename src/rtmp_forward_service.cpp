@@ -2424,12 +2424,12 @@ butil::Status RtmpForwardService::add_player(const std::string& key,
     }
     rc = new_puller->Init(sub_stream_creator, key, vhost, app, stream_name, new_queries, local_publisher);
     if (rc != 0) {
-        LOG(ERROR) << "Fail to init puller=" << new_puller.get() << " for "
-                   << conn_req.tcurl() << '/' << stream_name << noflush;
         if (!new_queries.empty()) {
-            LOG(ERROR) << '?' << new_queries;
+            LOG(ERROR) << "Fail to init puller=" << new_puller.get() << " for "
+                       << conn_req.tcurl() << '/' << stream_name << '?' << new_queries;
         } else {
-            LOG(ERROR);
+            LOG(ERROR) << "Fail to init puller=" << new_puller.get() << " for "
+                       << conn_req.tcurl() << '/' << stream_name;
         }
         goto SET_PULLER_IN_PLAYERS;
     }

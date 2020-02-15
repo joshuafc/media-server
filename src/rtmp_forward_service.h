@@ -18,7 +18,9 @@
 
 #ifndef MEDIA_SERVER_RTMP_FORWARD_SERVICE_H
 #define MEDIA_SERVER_RTMP_FORWARD_SERVICE_H
-
+#if BRPC_WITH_GLOG
+    #include "glog/logging.h"
+#endif
 #include "brpc/rtmp.h"
 #include "brpc/builtin/tabbed.h"
 #include "media_server.pb.h"

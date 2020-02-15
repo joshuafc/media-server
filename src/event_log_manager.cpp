@@ -15,6 +15,10 @@
 
 // Authors: Ge,Jun (jge666@gmail.com)
 //          Jiashun Zhu(zhujiashun2010@gmail.com)
+#ifdef BRPC_WITH_GLOG
+#include "glog/logging.h"
+#define LOG_STREAM LOG
+#endif
 
 #include <gflags/gflags_declare.h>
 #include "butil/atomicops.h"

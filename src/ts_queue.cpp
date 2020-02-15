@@ -340,7 +340,7 @@ void TsEntry::add_downloader(brpc::ProgressiveAttachment* pa,
             event_log_manager.print_event_log(EVENT_LOG_STOP_PLAY, charge_key, _ts.size(), 0);
             VLOG(99) << "Write " << *this << " to pa@" << pa->remote_side();
         } else if (errno != brpc::EOVERCROWDED) {
-            VPLOG(99) << "Fail to write " << *this << " to pa@"
+            VLOG(99) << "Fail to write " << *this << " to pa@"
                       << pa->remote_side();
         } else {
             LOG(WARNING) << "Fail to write " << *this << " to pa@"

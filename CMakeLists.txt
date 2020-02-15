@@ -1,12 +1,20 @@
 cmake_minimum_required(VERSION 2.8.10)
 project(media_server C CXX)
-
+set( CMAKE_VERBOSE_MAKEFILE  ON)
 option(BRPC_LINK_SO "Whether brpc are linked dynamically" OFF)
-
+option(WITH_GLOG "Whether brpc are linked dynamically" OFF)
+if(WITH_GLOG)
+    find_path(GLOG_INCLUDE_PATH glog/logging.h)
+    find_library(GLOG_LIBRARY NAMES glog libgolg)
+    include_directories(${GLOG_INCLUDE_PATH})
+    add_definitions(-DBRPC_WITH_GLOG=1)
+endif()
 include(FindThreads)
 include(FindProtobuf)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/src)
-
+link_directories(
+        ${CMAKE_PREFIX_PATH}/lib
+)
 find_path(GPERFTOOLS_INCLUDE_DIR NAMES gperftools/heap-profiler.h)
 find_library(GPERFTOOLS_LIBRARIES NAMES tcmalloc_and_profiler)
 include_directories(${GPERFTOOLS_INCLUDE_DIR})
@@ -49,7 +57,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 
 set(CMAKE_CPP_FLAGS "${DEFINE_CLOCK_GETTIME} -DGFLAGS_NS=${GFLAGS_NS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CPP_FLAGS} -DNDEBUG -O2 -D__const__= -pipe -W -Wall -Wno-unused-parameter -fPIC -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CPP_FLAGS} -D__const__= -pipe -W -Wall -Wno-unused-parameter -fPIC -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DBRPC_ENABLE_CPU_PROFILER")
 
 if(CMAKE_VERSION VERSION_LESS "3.1.3")
@@ -91,7 +99,7 @@ set(DYNAMIC_LIB
     dl
     ${GPERFTOOLS_LIBRARIES}
     )
-
+message(STATUS "LIBS: ${DYNAMIC_LIB}")
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(DYNAMIC_LIB ${DYNAMIC_LIB}
         pthread
