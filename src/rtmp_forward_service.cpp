@@ -23,7 +23,7 @@
 #include "butil/endpoint.h"
 #include "butil/containers/flat_map.h"
 #include "butil/containers/pooled_map.h"
-#include "butil/md5.h"
+#include "openssl/md5.h"
 #include "brpc/builtin/common.h"
 #include "brpc/channel.h"
 #include "brpc/server.h"
@@ -1446,8 +1446,8 @@ void RtmpForwarder::OnVideoMessage(brpc::RtmpVideoMessage* msg) {
     }
 }
 
-static void key_to_url(const butil::StringPiece& key,
-                       int port,
+static void key_to_url(brpc::Controller* cntl,
+                       const butil::StringPiece& key,
                        std::string* rtmpurl,
                        std::string* flvurl,
                        std::string* hlsurl) {
@@ -1455,7 +1455,7 @@ static void key_to_url(const butil::StringPiece& key,
     butil::StringPiece app;
     butil::StringPiece stream_name;
     brpc::ParseRtmpURL(key, &vhost, NULL, NULL, &app, &stream_name);
-    butil::StringPiece host(butil::my_hostname());
+    butil::StringPiece host(cntl->http_request().uri().host()); /*butil::my_hostname()*/
     const bool has_vhost = is_user_defined_vhost(vhost);
     if (rtmpurl) {
         rtmpurl->reserve(7/*prefix*/ + host.size() + 6/*port*/ + 1/*slash*/
@@ -1463,7 +1463,7 @@ static void key_to_url(const butil::StringPiece& key,
                          + 1/*slash*/ + stream_name.size());
         rtmpurl->append("rtmp://");
         rtmpurl->append(host.data(), host.size());
-        butil::string_appendf(rtmpurl, ":%d", port);
+        butil::string_appendf(rtmpurl, ":%d",  cntl->http_request().uri().port());
         rtmpurl->push_back('/');
         rtmpurl->append(app.data(), app.size());
         if (has_vhost) {
@@ -1480,7 +1480,7 @@ static void key_to_url(const butil::StringPiece& key,
                         + 4/*suffix*/ + (has_vhost ? (vhost.size() + 9) : 0));
         flvurl->append("http://");
         flvurl->append(host.data(), host.size());
-        butil::string_appendf(flvurl, ":%d", port);
+        butil::string_appendf(flvurl, ":%d", cntl->http_request().uri().port());
         flvurl->push_back('/');
         flvurl->append(app.data(), app.size());
         flvurl->push_back('/');
@@ -1498,7 +1498,7 @@ static void key_to_url(const butil::StringPiece& key,
                         + 5/*suffix*/ + (has_vhost ? (vhost.size() + 9) : 0));
         hlsurl->append("http://");
         hlsurl->append(host.data(), host.size());
-        butil::string_appendf(hlsurl, ":%d", port);
+        butil::string_appendf(hlsurl, ":%d", cntl->http_request().uri().port());
         hlsurl->push_back('/');
         hlsurl->append(app.data(), app.size());
         hlsurl->push_back('/');
@@ -2861,9 +2861,7 @@ void MonitoringServiceImpl::monitor(
             std::string rtmpurl;
             std::string flvurl;
             std::string hlsurl;
-            int port = (rtmp_options().internal_port > 0 ?
-                        rtmp_options().internal_port : rtmp_options().port);
-            key_to_url(key, port, &rtmpurl, &flvurl, &hlsurl);
+            key_to_url(cntl, key, &rtmpurl, &flvurl, &hlsurl);
             os << "<a href=\"http://cyberplayer.bcelive.com/live/index.html"
                 "?fileUrl=" << rtmpurl;
             os << "\">rtmp</a> "
@@ -3046,9 +3044,8 @@ void MonitoringServiceImpl::urls(
     std::string rtmpurl;
     std::string flvurl;
     std::string hlsurl;
-    int port = (rtmp_options().internal_port > 0 ?
-                rtmp_options().internal_port : rtmp_options().port);
-    key_to_url(key, port, &rtmpurl, &flvurl, &hlsurl);
+
+    key_to_url(cntl, key, &rtmpurl, &flvurl, &hlsurl);
     os << "rtmp: http://cyberplayer.bcelive.com/live/index.html"
         "?fileUrl=" << rtmpurl;
     if (!rtmp_options().auth_play.empty()) {
@@ -3065,7 +3062,7 @@ void MonitoringServiceImpl::urls(
         os << "magic=" MEDIA_SERVER_AUTH_MAGIC;
     }
     os << "&isLive=true"
-        "\nhls:  http://" << butil::my_hostname() << ':'
-       << port << "/play_hls?fileUrl=" << hlsurl << '\n';
+        "\nhls:  http://" << cntl->http_request().uri().host() << ':'
+       << cntl->http_request().uri().port() << "/play_hls?fileUrl=" << hlsurl << '\n';
     os.move_to(cntl->response_attachment());
 }

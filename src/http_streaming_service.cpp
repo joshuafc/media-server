@@ -18,7 +18,7 @@
 
 #include <gflags/gflags.h>
 #include "butil/memory/singleton_on_pthread_once.h"
-#include "butil/md5.h"
+#include "openssl/md5.h"
 #include "bthread/bthread.h"
 #include "brpc/channel.h"
 #include "brpc/callback.h"
