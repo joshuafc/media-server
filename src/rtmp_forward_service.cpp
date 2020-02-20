@@ -1485,9 +1485,9 @@ static void key_to_url(brpc::Controller* cntl,
         flvurl->append(app.data(), app.size());
         flvurl->push_back('/');
         flvurl->append(stream_name.data(), stream_name.size());
-        flvurl->append(".flv");
+        flvurl->append(".flv%3FisLive=true");
         if (has_vhost) {
-            flvurl->append("%3Fvhost=");
+            flvurl->append("%26vhost=");
             flvurl->append(vhost.data(), vhost.size());
         }
     }
@@ -3066,8 +3066,7 @@ void MonitoringServiceImpl::urls(
         }
         os << "magic=" MEDIA_SERVER_AUTH_MAGIC;
     }
-    os << "&isLive=true"
-        "\nhls:  http://" << cntl->http_request().uri().host() << ':'
+    os << "\nhls:  http://" << cntl->http_request().uri().host() << ':'
        << cntl->http_request().uri().port() << "/play_hls?fileUrl=" << hlsurl << '\n';
     os.move_to(cntl->response_attachment());
 }

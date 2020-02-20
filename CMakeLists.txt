@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.10)
 project(media_server C CXX)
 set( CMAKE_VERBOSE_MAKEFILE  ON)
-option(BRPC_LINK_SO "Whether brpc are linked dynamically" OFF)
+option(BRPC_LINK_SO "Whether brpc are linked dynamically" ON)
 option(WITH_GLOG "Whether brpc are linked dynamically" OFF)
 if(WITH_GLOG)
     find_path(GLOG_INCLUDE_PATH glog/logging.h)
