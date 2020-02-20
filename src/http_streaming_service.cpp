@@ -53,16 +53,15 @@ FlvDownloader::FlvDownloader(brpc::ProgressiveAttachment* flv_pa,
                              RtmpForwardService* forward_service,
                              const std::string& play_key,
                              const std::string& charge_key,
-                             bool audio_enabled,
-                             bool video_enabled)
+                             bool request_audio,
+                             bool request_video)
     : brpc::RtmpStreamBase(false)
     , _first_avc_seq_header_delay(0)
     , _first_video_message_delay(0)
     , _first_aac_seq_header_delay(0)
     , _first_audio_message_delay(0)
-    , _audio_enabled(audio_enabled)
-    , _video_enabled(video_enabled)
-    , _flv_writer(&_flv_data)
+    , _request_audio(request_audio)
+    , _request_video(request_video)
     , _flv_pa(flv_pa)
     , _sent_bytes(0)
     , _play_key(play_key)
@@ -92,22 +91,27 @@ void FlvDownloader::Describe(std::ostream& os,
 }
 
 int FlvDownloader::SendMetaData(const brpc::RtmpMetaData& metadata, const butil::StringPiece& name) {
+    if (!_flv_writer)
+    {
+        LOG(ERROR) << "Write Data Before Init Writer!";
+        return -2;
+    }
     brpc::RtmpMetaData cp;
     const brpc::RtmpMetaData* written_metadata = NULL;
-    if (_audio_enabled && _video_enabled) {
+    if (_request_audio && _request_video) {
         written_metadata = &metadata;
     } else {
         cp = metadata;
         written_metadata = &cp;
-        if (!_audio_enabled) {
+        if (!_request_audio) {
             remove_audio_releated_fields(&cp.data);
         }
-        if (!_video_enabled) {
+        if (!_request_video) {
             remove_video_releated_fields(&cp.data);
         }
     }
     const size_t old_size = _flv_data.size();
-    butil::Status st = _flv_writer.Write(*written_metadata);
+    butil::Status st = _flv_writer->Write(*written_metadata);
     if (!st.ok()) {
         LOG(ERROR) << "Fail to write metadata into FLV, " << st;
         return -1;
@@ -115,8 +119,13 @@ int FlvDownloader::SendMetaData(const brpc::RtmpMetaData& metadata, const butil:
     return flush_or_revert(old_size);
 }
 int FlvDownloader::SendAudioMessage(const brpc::RtmpAudioMessage& msg) {
-    if (!_audio_enabled) {
+    if (!_request_audio) {
         return flush_or_revert();
+    }
+    if (!_flv_writer)
+    {
+        LOG(ERROR) << "Write Data Before Init Writer!";
+        return -2;
     }
     if (msg.IsAACSequenceHeader()) {
         if (!_first_aac_seq_header_delay) {
@@ -128,7 +137,7 @@ int FlvDownloader::SendAudioMessage(const brpc::RtmpAudioMessage& msg) {
         }
     }
     const size_t old_size = _flv_data.size();
-    butil::Status st = _flv_writer.Write(msg);
+    butil::Status st = _flv_writer->Write(msg);
     if (!st.ok()) {
         LOG(ERROR) << "Fail to write audio message into FLV, " << st;
         return -1;
@@ -137,8 +146,13 @@ int FlvDownloader::SendAudioMessage(const brpc::RtmpAudioMessage& msg) {
 }
     
 int FlvDownloader::SendVideoMessage(const brpc::RtmpVideoMessage& msg) {
-    if (!_video_enabled) {
+    if (!_request_video) {
         return flush_or_revert();
+    }
+    if (!_flv_writer)
+    {
+        LOG(ERROR) << "Write Data Before Init Writer!";
+        return -2;
     }
     if (msg.IsAVCSequenceHeader()) {
         if (!_first_avc_seq_header_delay) {
@@ -150,7 +164,7 @@ int FlvDownloader::SendVideoMessage(const brpc::RtmpVideoMessage& msg) {
         }
     }
     const size_t old_size = _flv_data.size();
-    butil::Status st = _flv_writer.Write(msg);
+    butil::Status st = _flv_writer->Write(msg);
     if (!st.ok()) {
         LOG(ERROR) << "Fail to write video message into FLV, " << st;
         return -1;
@@ -186,6 +200,15 @@ int FlvDownloader::flush_or_revert(ssize_t size_on_failure) {
         }
     }
     return -1;
+}
+
+void FlvDownloader::InitWriter(bool audio_available, bool video_available) {
+    _audio_available = audio_available;
+    _video_available = video_available;
+    _flv_writer.reset(
+            new brpc::FlvWriter(&_flv_data,
+            _request_video && _video_available,
+            _request_audio && _audio_available));
 }
 
 HttpStreamingServiceOptions::HttpStreamingServiceOptions()

@@ -31,9 +31,11 @@ public:
                   RtmpForwardService* forward_service,
                   const std::string& play_key,
                   const std::string& charge_key,
-                  bool audio_enabled,
-                  bool video_enabled);
+                  bool request_audio,
+                  bool request_video);
     ~FlvDownloader();
+
+    void InitWriter(bool audio_available, bool video_available);
 
     // @RtmpStreamBase
     int SendMetaData(const brpc::RtmpMetaData& metadata, const butil::StringPiece& name);
@@ -56,10 +58,12 @@ private:
     int64_t _first_video_message_delay;
     int64_t _first_aac_seq_header_delay;
     int64_t _first_audio_message_delay;
-    bool _audio_enabled;
-    bool _video_enabled;
+    bool _request_audio;
+    bool _request_video;
+    bool _audio_available{false};
+    bool _video_available{false};
     butil::IOBuf _flv_data;
-    brpc::FlvWriter _flv_writer;
+    std::unique_ptr<brpc::FlvWriter> _flv_writer;
     butil::intrusive_ptr<brpc::ProgressiveAttachment> _flv_pa;
     size_t _sent_bytes;
     std::string _play_key;

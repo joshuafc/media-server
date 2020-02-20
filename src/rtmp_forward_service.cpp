@@ -2324,6 +2324,11 @@ butil::Status RtmpForwardService::add_player(const std::string& key,
     if (players == NULL) {
         return butil::Status(EPERM, "Fail to find key=%s", key.c_str());
     }
+    {
+        FlvDownloader *flv_player = dynamic_cast<FlvDownloader*>(player);
+        if( flv_player )
+            flv_player->InitWriter( players->_audio_frames > 0, players->_video_frames > 0 );
+    }
     butil::intrusive_ptr<PlayerInfo> info;
     if (player != NULL) {
         info.reset(new PlayerInfo());
