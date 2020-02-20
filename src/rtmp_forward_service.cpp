@@ -66,7 +66,7 @@ DEFINE_string(default_app, "bdms_default_app", "Default app for the case when ap
 DEFINE_bool(reject_second_stream_when_republish, false, "When set, reject the second "
             "publish stream and terminate the second publish connection when republish");
 DEFINE_bool(log_stats, false, "When set, write STATS logs about players and publishers");
-
+DECLARE_bool(enable_vhost);
 #define SRS_DEFAULT_VHOST   "__defaultVhost__"
 #define RTMP_UNIFIED_APP    "unified_app"
 // Use default vhost of SRS as the unified domain which will be converted to
@@ -1466,7 +1466,7 @@ static void key_to_url(brpc::Controller* cntl,
         butil::string_appendf(rtmpurl, ":%d",  cntl->http_request().uri().port());
         rtmpurl->push_back('/');
         rtmpurl->append(app.data(), app.size());
-        if (has_vhost) {
+        if (FLAGS_enable_vhost && has_vhost) {
             rtmpurl->append("?vhost=");
             rtmpurl->append(vhost.data(), vhost.size());
         }
@@ -1486,7 +1486,7 @@ static void key_to_url(brpc::Controller* cntl,
         flvurl->push_back('/');
         flvurl->append(stream_name.data(), stream_name.size());
         flvurl->append(".flv%3FisLive=true");
-        if (has_vhost) {
+        if (FLAGS_enable_vhost && has_vhost) {
             flvurl->append("%26vhost=");
             flvurl->append(vhost.data(), vhost.size());
         }
@@ -1504,7 +1504,7 @@ static void key_to_url(brpc::Controller* cntl,
         hlsurl->push_back('/');
         hlsurl->append(stream_name.data(), stream_name.size());
         hlsurl->append(".m3u8");
-        if (has_vhost) {
+        if (FLAGS_enable_vhost && has_vhost) {
             hlsurl->append("%3Fvhost=");
             hlsurl->append(vhost.data(), vhost.size());
         }
@@ -2880,7 +2880,7 @@ void MonitoringServiceImpl::monitor(
                 }
                 os << "magic=" MEDIA_SERVER_AUTH_MAGIC;
             }
-            os << "&isLive=true\">flv</a> <a href=\"/play_hls?fileUrl="
+            os << "\">flv</a> <a href=\"/play_hls?fileUrl="
                << hlsurl << "\">hls</a></td></tr>";
         }
         os << '\n';

@@ -26,14 +26,20 @@
 
 DEFINE_int64(disable_server_duration, 5, "Upstream server would be disabled for"
         "such seconds if we can't pull or push streams to this server");
+DEFINE_bool(enable_vhost, false, "set true to enable vhost feature.");
 
 std::string make_key(const butil::StringPiece& vhost,
                      const butil::StringPiece& app,
                      const butil::StringPiece& stream_name) {
     std::string key;
     key.reserve(vhost.size() + app.size() + stream_name.size() + 3);
-    key.append(vhost.data(), vhost.size());
-    key.push_back('/');
+    if(FLAGS_enable_vhost)
+    {
+        key.append(vhost.data(), vhost.size());
+        key.push_back('/');
+    }else{
+        key.append("_/");
+    }
     key.append(app.data(), app.size());
     key.push_back('/');
     key.append(stream_name.data(), stream_name.size());

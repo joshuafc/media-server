@@ -37,9 +37,10 @@ DECLARE_int32(connect_timeout_ms);
 DECLARE_int32(timeout_ms);
 DECLARE_string(default_vhost);
 DECLARE_int32(retry_interval_ms);
-
+DECLARE_bool(enable_vhost);
 DEFINE_int64(get_media_playlist_times, 20, "the retry time that getting media playlist to avoid transcoded stream not ready problem");
 DEFINE_bool(use_host_in_m3u8, true, "whether to use host in url in the response of m3u8");
+DECLARE_bool(enable_vhost);
 
 static bvar::Adder<int64_t> g_flv_user_count("flv_user_count");
 
@@ -669,7 +670,7 @@ void HttpStreamingServiceImpl::get_master_playlist(
             host_str = butil::string_printf("%s:%d", butil::my_ip_cstr(), port);
         }
         uri.SetQuery("specified_host", host_str);
-        if (is_user_defined_vhost(vhost)) {
+        if (FLAGS_enable_vhost && is_user_defined_vhost(vhost)) {
             uri.SetQuery("vhost", vhost);
         }
         return _forward_service->get_target_server(
@@ -684,20 +685,23 @@ void HttpStreamingServiceImpl::get_master_playlist(
         // The request is from another media-server which proxies HLS requests
         // (generally inside a CDN node using consistent-hashing LB)
         os << *specified_host;
+    } else if (FLAGS_use_host_in_m3u8) {
+        os << butil::string_printf("%s:%d", uri.host().c_str(), uri.port());
     } else {
-        os << cntl->http_request().uri().host() << ":" << cntl->http_request().uri().port();
-        //os << butil::ip2str(cntl->local_side().ip).c_str() << ':' << port;
+        os << butil::string_printf("%s:%d", butil::my_ip_cstr(), port);
     }
     // Remove specified_host from queries which will be after media playlists
     // and visible to users.
     uri.RemoveQuery("specified_host");
     specified_host = NULL;
     const HLSUserId user_id = generate_hls_user_id();
-    os << '/' << vhost << '/' << app << '/' << stream_name
+    if(FLAGS_enable_vhost)
+        os << '/' << vhost ;
+    os << '/' << app << '/' << stream_name
        << ".lss" << user_id << ".dynamic.m3u8";
     const std::string* vhost_pstr = uri.GetQuery("vhost");
     int firstq = 0;
-    if (vhost_pstr == NULL) {
+    if (FLAGS_enable_vhost && vhost_pstr == NULL) {
         os << (!firstq++ ? '?': '&') << "vhost=" << original_vhost; 
     }
     if (!uri.query().empty()) {
@@ -757,17 +761,26 @@ void HttpStreamingServiceImpl::get_media_playlist(
                         uri.path().c_str());
         return;
     }
-    const std::string key = key_and_lssid.substr(0, dot_pos);
-    const size_t vhost_pos = key.find_first_of('/');
-    if (vhost_pos == std::string::npos) {
-        cntl->SetFailed(brpc::EREQUEST, "Invalid M3U8 path=%s",
-                        uri.path().c_str());
-        return;
-    }
-    std::string vhost = key.substr(0, vhost_pos);
-    const std::string* vhost_pstr = uri.GetQuery("vhost");
-    if (vhost_pstr != NULL) {
-        vhost = *vhost_pstr;
+    std::string key = key_and_lssid.substr(0, dot_pos);
+
+    std::string vhost;
+    if(FLAGS_enable_vhost)
+    {
+        const std::string* vhost_pstr = uri.GetQuery("vhost");
+        if (vhost_pstr != NULL) {
+            vhost = *vhost_pstr;
+        }else{
+            const size_t vhost_pos = key.find_first_of('/');
+            if (vhost_pos == std::string::npos) {
+                cntl->SetFailed(brpc::EREQUEST, "Invalid M3U8 path=%s",
+                                uri.path().c_str());
+                return;
+            }
+            vhost = key.substr(0, vhost_pos);
+        }
+    }else{
+        key = std::string("_/") + key;
+        vhost = "_";
     }
 
     if (http_options().proxy_hls &&
@@ -816,7 +829,11 @@ void HttpStreamingServiceImpl::get_media_playlist(
         return;
     }
     char queries[128];
-    snprintf(queries, sizeof(queries), "lssid=%" PRIu64 "&vhost=%s", user_id, vhost.c_str());
+    if( FLAGS_enable_vhost )
+        snprintf(queries, sizeof(queries), "lssid=%" PRIu64 "&vhost=%s", user_id, vhost.c_str());
+    else
+        snprintf(queries, sizeof(queries), "lssid=%" PRIu64, user_id);
+
     butil::IOBufBuilder os;
     int nretries = 0;
     while (nretries < FLAGS_get_media_playlist_times && !bthread_stopped(bthread_self())) {
@@ -856,7 +873,7 @@ void HttpStreamingServiceImpl::stream_ts(
                         uri.path().c_str());
         return;
     }
-    const std::string key = key_and_sn.substr(0, dot_pos);
+    std::string key = key_and_sn.substr(0, dot_pos);
     butil::StringPiece sn_str(key_and_sn.data() + dot_pos + 1,
                              key_and_sn.size() - dot_pos - 1);
     if (!sn_str.starts_with("seq")) {
@@ -865,19 +882,32 @@ void HttpStreamingServiceImpl::stream_ts(
         return;        
     }
     const uint64_t seq_num = strtoull(sn_str.data() + 3, NULL, 10);
-    const size_t vhost_pos = key.find_first_of('/');
-    if (vhost_pos == std::string::npos) {
-        cntl->SetFailed(brpc::EREQUEST, "Invalid TS path=%s",
-                        uri.path().c_str());
-        return;        
+
+
+    std::string vhost;
+    std::string charge_key;
+    if(FLAGS_enable_vhost)
+    {
+        const size_t vhost_pos = key.find_first_of('/');
+        if (vhost_pos == std::string::npos) {
+            cntl->SetFailed(brpc::EREQUEST, "Invalid TS path=%s",
+                            uri.path().c_str());
+            return;
+        }
+        const std::string* vhost_pstr = uri.GetQuery("vhost");
+        if (vhost_pstr != NULL) {
+            vhost = *vhost_pstr;
+        }else{
+            vhost = key.substr(0, vhost_pos);
+        }
+        charge_key = key;
+        charge_key.replace(0, vhost_pos, vhost);
+    }else{
+        key = std::string("_/") + key;
+        vhost = "_";
+        charge_key = key;
     }
-    std::string vhost = key.substr(0, vhost_pos);
-    const std::string* vhost_pstr = uri.GetQuery("vhost");
-    if (vhost_pstr != NULL) {
-        vhost = *vhost_pstr;
-    }
-    std::string charge_key = key;
-    charge_key.replace(0, vhost_pos, vhost);
+
     // In order to support ffplay
     bool started_with_kf_in_ts =
         is_start_with_keyframe(cntl->http_request().GetHeader("User-Agent"));
