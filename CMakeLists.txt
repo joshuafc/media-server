@@ -99,7 +99,7 @@ set(DYNAMIC_LIB
     dl
     ${GPERFTOOLS_LIBRARIES}
     )
-message(STATUS "LIBS: ${DYNAMIC_LIB}")
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(DYNAMIC_LIB ${DYNAMIC_LIB}
         pthread

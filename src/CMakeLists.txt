@@ -8,3 +8,9 @@ if(WITH_GLOG)
 endif()
 target_link_libraries(media_server ${BRPC_LIB} ${DYNAMIC_LIB} )
 
+install(TARGETS media_server
+        RUNTIME DESTINATION bin
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        )
+
