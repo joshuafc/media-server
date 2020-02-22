@@ -23,13 +23,13 @@
 #include "shared_map.h"
 #include "ts_queue.h"
 
-DEFINE_int64(ts_duration_ms, 1042, "Cut a TS every so many milliseconds");
-DEFINE_int64(ts_max_stored, 32, "Default max number of TS stored");
+DEFINE_int64(ts_duration_ms, 3000, "Cut a TS every so many milliseconds");
+DEFINE_int64(ts_max_stored, 10, "Default max number of TS stored");
 // Generate so many "fake" TS after the latest TS so that clients can send
 // downloading requests before the TS are truely generated and start
 // downloading immediately when the TS has data. This technique relies on
 // chunked mode in http 1.1 and hides one RTT between clients and server.
-DEFINE_int64(ts_pre_generated, 3, "generate so many fake TS");
+DEFINE_int64(ts_pre_generated, 0, "generate so many fake TS");
 
 static bvar::Adder<int64_t> s_ts_downloader_count("hls_ts_downloader_count");
 

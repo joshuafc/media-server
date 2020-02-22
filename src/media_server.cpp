@@ -22,7 +22,9 @@
 #include "rtmp_forward_service.h"
 #include "http_streaming_service.h"
 
-DEFINE_int32(port, 8079, "Listening port of this server");
+DEFINE_int32(port, 9000, "Listening port of this server");
+DEFINE_int32(com_port, 8888, "Compatible listening port of this server");
+
 DEFINE_int32(internal_port, -1, "Only provide builtin services at this port, "
              "which is only accessible from internal network");
 
@@ -134,8 +136,7 @@ int main(int argc, char* argv[]) {
         "*.dynamic.m3u8 => get_media_playlist, "
         "*.m3u8 => get_master_playlist, "
         "crossdomain.xml => get_crossdomain_xml, "
-        "play_hls => play_hls, "
-        "get_hls_min => get_hls_min, "
+        "player/* => player, "
          + FLAGS_cdn_probe_file + " => get_cdn_probe";
     const char* const HTTP_SERVICE_RESTFUL_MAPPINGS = mapping_tmp.c_str();
     if (server.AddService(&http_streaming_service,
@@ -144,6 +145,15 @@ int main(int argc, char* argv[]) {
         LOG(ERROR) << "Fail to add http_streaming_service";
         return -1;
     }
+    brpc::Server server2;
+    CompatibleServiceImpl compatibleService(&http_streaming_service);
+    if (server2.AddService(&compatibleService,
+                          brpc::SERVER_DOESNT_OWN_SERVICE,
+                          "*.m3u8=>hls, live/*=>live") != 0) {
+        LOG(ERROR) << "Fail to add http_streaming_service";
+        return -1;
+    }
+
     const char* const MONITORING_SERVICE_RESTFUL_MAPPINGS =
         "/media_server/* => monitor, "
         "/players/* => players, "
@@ -165,6 +175,12 @@ int main(int argc, char* argv[]) {
     server_opt.idle_timeout_sec = FLAGS_server_idle_timeout;
     server_opt.internal_port = rtmp_opt.internal_port;
     if (server.Start(rtmp_opt.port, &server_opt) != 0) {
+        LOG(ERROR) << "Fail to start media_server";
+        return -1;
+    }
+
+    brpc::ServerOptions server2_opt;
+    if (server2.Start(8888, &server2_opt) != 0){
         LOG(ERROR) << "Fail to start media_server";
         return -1;
     }
@@ -197,12 +213,15 @@ int main(int argc, char* argv[]) {
             LOG(ERROR) << "Fail to start media_server(cdn-merge)";
             return -1;
         }
+
         // NOTE: quit server before merge_server otherwise a lot of pulling
         // warnings will be reported.
         server.RunUntilAskedToQuit();
         merge_server.RunUntilAskedToQuit();
+        server2.RunUntilAskedToQuit();
     } else {
         server.RunUntilAskedToQuit();
+        server2.RunUntilAskedToQuit();
     }
     return 0;
 }

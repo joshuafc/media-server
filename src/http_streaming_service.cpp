@@ -26,12 +26,12 @@
 #include "brpc/builtin/common.h"
 #include "brpc/policy/hasher.h"
 #include <gperftools/malloc_extension.h>
-#include "hls_min_js.h"
 #include "ts_queue.h"
 #include "http_streaming_service.h"
 #include "rtmp_forward_service.h"
 #include "event_log_manager.h"
 #include "frame_queue.h"
+#include <experimental/filesystem>
 
 DECLARE_int32(connect_timeout_ms);
 DECLARE_int32(timeout_ms);
@@ -41,6 +41,8 @@ DECLARE_bool(enable_vhost);
 DEFINE_int64(get_media_playlist_times, 20, "the retry time that getting media playlist to avoid transcoded stream not ready problem");
 DEFINE_bool(use_host_in_m3u8, true, "whether to use host in url in the response of m3u8");
 DECLARE_bool(enable_vhost);
+DEFINE_string(web_root, "", "static web service root path.");
+DECLARE_int32(port);
 
 static bvar::Adder<int64_t> g_flv_user_count("flv_user_count");
 
@@ -274,6 +276,15 @@ HttpStreamingServiceImpl::HttpStreamingServiceImpl(
         } else {
             _proxy_http_channel.swap(chan);
         }
+    }
+    if( !FLAGS_web_root.empty() )
+    {
+        _static_web_service->SetRootPath(FLAGS_web_root);
+        _static_web_service->SetListDir(false);
+    }else{
+        char buf[1024] = {0};
+        readlink("/proc/self/exe", buf, 1024);
+        _static_web_service->SetRootPath(std::experimental::filesystem::path(buf).parent_path()/"web_root");
     }
 }
 
@@ -641,6 +652,8 @@ void HttpStreamingServiceImpl::get_master_playlist(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller* cntl =
         static_cast<brpc::Controller*>(cntl_base);
+    cntl->http_response().SetHeader("Access-Control-Allow-Origin", "*");
+
     brpc::URI& uri = cntl->http_request().uri();
     const std::string& app_and_stream = cntl->http_request().unresolved_path();
     butil::StringPiece app;
@@ -710,7 +723,6 @@ void HttpStreamingServiceImpl::get_master_playlist(
     }
     os << '\n';
     cntl->http_response().set_content_type("application/vnd.apple.mpegurl");
-    cntl->http_response().SetHeader("Access-Control-Allow-Origin", "*");
     os.move_to(cntl->response_attachment());
     // Touch the entry for the user_id so that get_media_playlist() can get
     // the user_id successfully. We don't add user entry in get_media_playlist()
@@ -983,66 +995,41 @@ void HttpStreamingServiceImpl::get_crossdomain_xml(
     cntl->http_response().set_content_type("text/xml");
 }
 
-void HttpStreamingServiceImpl::play_hls(
-    google::protobuf::RpcController* cntl_base,
-    const HttpRequest*,
-    HttpResponse*,
-    google::protobuf::Closure* done) {
+void HttpStreamingServiceImpl::player(google::protobuf::RpcController* cntl_base,
+            const HttpRequest*,
+            HttpResponse*,
+            google::protobuf::Closure* done)
+{
     brpc::ClosureGuard done_guard(done);
-    brpc::Controller* cntl =
-        static_cast<brpc::Controller*>(cntl_base);
-    cntl->http_response().set_content_type("text/html");
-    const std::string* m3u8url = cntl->http_request().uri().GetQuery("fileUrl");
-    if (m3u8url == NULL) {
-        cntl->SetFailed(brpc::EREQUEST, "query `fileUrl' must be specified");
-        return;
+    auto* cntl = dynamic_cast<brpc::Controller*>(cntl_base);
+    if( !cntl->http_request().unresolved_path().empty() )
+        _static_web_service->ProcessRequest( cntl );
+    else{
+        const std::string* videoUrl = cntl->http_request().uri().GetQuery("fileUrl");
+        if (videoUrl == NULL) {
+            cntl->SetFailed(brpc::EREQUEST, "query `fileUrl' must be specified");
+            return;
+        }
+        std::map<std::string, std::string> tpl;
+        tpl.emplace(std::make_pair("{{videoUrl}}", UrlDecode(*videoUrl)));
+
+        const std::string* type = cntl->http_request().uri().GetQuery("type");
+        if (type == NULL) {
+            cntl->SetFailed(brpc::EREQUEST, "query `type' must be specified");
+            return;
+        }
+        cntl->http_response().SetHeader("Access-Control-Allow-Origin", "*");
+        if( *type == "flv" )
+            _static_web_service->ProcessWithTemplate(cntl, "play_flv.tpl", tpl);
+        else if( *type == "hls" )
+            _static_web_service->ProcessWithTemplate(cntl, "play_hls.tpl", tpl);
+        else if( *type == "rtmp" )
+            _static_web_service->ProcessWithTemplate(cntl, "play_rtmp.tpl", tpl);
+        else{
+            cntl->SetFailed(brpc::EREQUEST, "query `fileUrl' must be specified");
+            return;
+        }
     }
-    butil::IOBufBuilder os;
-    os << "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
-        "  <meta charset=\"utf-8\">\n"
-        "  <script>\n"
-        "  !function(a){var b=/iPhone/i,c=/iPod/i,d=/iPad/i,e=/(?=.*\bAndroid\b)(?=.*\bMobile\b)/i,f=/Android/i,g=/(?=.*\bAndroid\b)(?=.*\bSD4930UR\b)/i,h=/(?=.*\bAndroid\b)(?=.*\b(?:KFOT|KFTT|KFJWI|KFJWA|KFSOWI|KFTHWI|KFTHWA|KFAPWI|KFAPWA|KFARWI|KFASWI|KFSAWI|KFSAWA)\b)/i,i=/IEMobile/i,j=/(?=.*\bWindows\b)(?=.*\bARM\b)/i,k=/BlackBerry/i,l=/BB10/i,m=/Opera Mini/i,n=/(CriOS|Chrome)(?=.*\bMobile\b)/i,o=/(?=.*\bFirefox\b)(?=.*\bMobile\b)/i,p=new RegExp('(?:Nexus 7|BNTV250|Kindle Fire|Silk|GT-P1000)','i'),q=function(a,b){return a.test(b)},r=function(a){var r=a||navigator.userAgent,s=r.split('[FBAN');return'undefined'!=typeof s[1]&&(r=s[0]),s=r.split('Twitter'),'undefined'!=typeof s[1]&&(r=s[0]),this.apple={phone:q(b,r),ipod:q(c,r),tablet:!q(b,r)&&q(d,r),device:q(b,r)||q(c,r)||q(d,r)},this.amazon={phone:q(g,r),tablet:!q(g,r)&&q(h,r),device:q(g,r)||q(h,r)},this.android={phone:q(g,r)||q(e,r),tablet:!q(g,r)&&!q(e,r)&&(q(h,r)||q(f,r)),device:q(g,r)||q(h,r)||q(e,r)||q(f,r)},this.windows={phone:q(i,r),tablet:q(j,r),device:q(i,r)||q(j,r)},this.other={blackberry:q(k,r),blackberry10:q(l,r),opera:q(m,r),firefox:q(o,r),chrome:q(n,r),device:q(k,r)||q(l,r)||q(m,r)||q(o,r)||q(n,r)},this.seven_inch=q(p,r),this.any=this.apple.device||this.android.device||this.windows.device||this.other.device||this.seven_inch,this.phone=this.apple.phone||this.android.phone||this.windows.phone,this.tablet=this.apple.tablet||this.android.tablet||this.windows.tablet,'undefined'==typeof window?this:void 0},s=function(){var a=new r;return a.Class=r,a};'undefined'!=typeof module&&module.exports&&'undefined'==typeof window?module.exports=r:'undefined'!=typeof module&&module.exports&&'undefined'!=typeof window?module.exports=s():'function'==typeof define&&define.amd?define('isMobile',[],a.isMobile=s()):a.isMobile=s()}(this);\n"
-        "  (function () {\n"
-        "    if (isMobile.apple.phone) {\n"
-        "      document.location = decodeURIComponent('" << *m3u8url << "');\n"
-        "    } else if (isMobile.android.phone || isMobile.seven_inch) {\n"
-        "      document.location = 'http://cyberplayer.bcelive.com/live/index.html?fileUrl=" << *m3u8url << "';\n"
-        "    }\n"
-        "  })();\n"
-        "  </script>\n"
-        "  <script src=\"/get_hls_min\"></script>\n"
-        "  <style type=\"text/css\">\n"
-        "  body {\n"
-        "    background-color: black;\n"
-        "  }\n"
-        "  .zoomed_mode{\n"
-        "    position: absolute;\n"
-        "    top: 0px;\n"
-        "    right: 0px;\n"
-        "    bottom: 0px;\n"
-        "    left: 0px;\n"
-        "    margin: auto;\n"
-        "    max-height: 100%;\n"
-        "    width: 100%;\n"
-        "  }</style>\n"
-        "</head>\n"
-        "<body>\n"
-        "<video id='video' class='zoomed_mode' controls></video>\n"
-        "<script>\n"
-        "  if(Hls.isSupported()) {\n"
-        "    var video = document.getElementById('video');\n"
-        "    var hls = new Hls();\n"
-        "    var m3u8Url = decodeURIComponent('" << *m3u8url << "');\n"
-        "    hls.loadSource(m3u8Url);\n"
-        "    hls.attachMedia(video);\n"
-        "    hls.on(Hls.Events.MANIFEST_PARSED,function() {\n"
-        "      video.play();\n"
-        "    });\n"
-        "  }\n"
-        "</script>\n"
-        "</body></html>\n";
-    os.move_to(cntl->response_attachment());
-    cntl->set_response_compress_type(brpc::COMPRESS_TYPE_GZIP);
 }
 
 static const char* g_last_modified = "Wed, 16 Sep 2015 01:25:30 GMT";
@@ -1056,32 +1043,6 @@ static void SetExpires(brpc::HttpHeader* header, time_t seconds) {
     header->SetHeader("Expires", buf);
 }
 
-void HttpStreamingServiceImpl::get_hls_min(
-    ::google::protobuf::RpcController* controller,
-    const HttpRequest* /*request*/,
-    HttpResponse* /*response*/,
-    ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard done_guard(done);
-    brpc::Controller *cntl = (brpc::Controller*)controller;
-    cntl->http_response().set_content_type("application/javascript");
-    SetExpires(&cntl->http_response(), 80000);
-
-    const std::string* ims =
-        cntl->http_request().GetHeader("If-Modified-Since");
-    if (ims != NULL && *ims == g_last_modified) {
-        cntl->http_response().set_status_code(brpc::HTTP_STATUS_NOT_MODIFIED);
-        return;
-    }
-    cntl->http_response().SetHeader("Last-Modified", g_last_modified);
-    
-    if (SupportGzip(cntl)) {
-        cntl->http_response().SetHeader("Content-Encoding", "gzip");
-        cntl->response_attachment().append(hls_min_js_iobuf_gzip());
-    } else {
-        cntl->response_attachment().append(hls_min_js_iobuf());
-    }
-}
-
 void HttpStreamingServiceImpl::get_cdn_probe(
     ::google::protobuf::RpcController* controller,
     const HttpRequest* /*request*/,
@@ -1090,4 +1051,60 @@ void HttpStreamingServiceImpl::get_cdn_probe(
     brpc::ClosureGuard done_guard(done);
     brpc::Controller *cntl = (brpc::Controller*)controller;
     cntl->response_attachment().append("Service is fine");
+}
+
+
+void CompatibleServiceImpl::hls(::google::protobuf::RpcController *controller, const ::HttpRequest *request,
+                                ::HttpResponse *response, ::google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    auto cntl = dynamic_cast<brpc::Controller*>(controller);
+    cntl->http_response().SetHeader("Access-Control-Allow-Origin", "*");
+    auto &uri = cntl->http_request().uri();
+    auto pos = uri.path().find_first_of("/hls");
+    if( pos == std::string::npos )
+    {
+        cntl->SetFailed("Error Url!");
+        return;
+    }
+    auto str3 = std::string("/live") + uri.path().substr(pos+4, uri.path().size()-(pos+4));
+//    _httpStreamService->get_master_playlist(controller, request, response, done);
+    std::string newUrl = (uri.scheme().empty() ? "http" : uri.scheme()) + "://" + uri.host() + ":" + std::to_string(FLAGS_port) + str3;
+    cntl->http_response().set_status_code(301);
+    cntl->http_response().set_content_type( "text/html" );
+    cntl->http_response().AppendHeader("Location", newUrl);
+}
+
+void CompatibleServiceImpl::live(::google::protobuf::RpcController *controller, const ::HttpRequest *request,
+                                 ::HttpResponse *response, ::google::protobuf::Closure *done) {
+    brpc::ClosureGuard done_guard(done);
+    auto cntl = dynamic_cast<brpc::Controller*>(controller);
+    cntl->http_response().SetHeader("Access-Control-Allow-Origin", "*");
+
+    auto &uri = cntl->http_request().uri();
+
+    auto app = uri.GetQuery("app");
+    if(!app)
+    {
+        cntl->SetFailed("no app!");
+        return;
+    }
+
+    auto stream = uri.GetQuery("stream");
+    if(!stream)
+    {
+        cntl->SetFailed("no stream!");
+        return;
+    }
+
+    std::string newUrl = (uri.scheme().empty() ? "http" : uri.scheme()) + "://" + uri.host() + ":" + std::to_string(FLAGS_port)
+            + "/" + *app + "/" + *stream + ".flv?isLive=true";
+
+    cntl->http_response().set_status_code(301);
+    cntl->http_response().set_content_type( "text/html" );
+    cntl->http_response().AppendHeader("Location", newUrl);
+}
+
+CompatibleServiceImpl::CompatibleServiceImpl(HttpStreamingServiceImpl *httpStreamService) : _httpStreamService(httpStreamService)
+{
+
 }

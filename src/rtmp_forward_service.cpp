@@ -2867,11 +2867,9 @@ void MonitoringServiceImpl::monitor(
             std::string flvurl;
             std::string hlsurl;
             key_to_url(cntl, key, &rtmpurl, &flvurl, &hlsurl);
-            os << "<a href=\"http://cyberplayer.bcelive.com/live/index.html"
-                "?fileUrl=" << rtmpurl;
-            os << "\">rtmp</a> "
-                "<a href=\"http://cyberplayer.bcelive.com/live/index.html?fileUrl="
-               << flvurl;
+            os << "<a href=\"/player?type=rtmp&fileUrl=" << rtmpurl;
+            os << "\" target=\"_blank\">rtmp</a> "
+                "<a href=\"/player?type=flv&fileUrl=" << flvurl;
             if (!rtmp_options().auth_play.empty()) {
                 if (flvurl.find("%3F") != std::string::npos) {
                     os << "%26"; // escaped &
@@ -2880,8 +2878,8 @@ void MonitoringServiceImpl::monitor(
                 }
                 os << "magic=" MEDIA_SERVER_AUTH_MAGIC;
             }
-            os << "\">flv</a> <a href=\"/play_hls?fileUrl="
-               << hlsurl << "\">hls</a></td></tr>";
+            os << "\" target=\"_blank\">flv</a> <a href=\"/player?type=hls&fileUrl="
+               << hlsurl << "\" target=\"_blank\">hls</a></td></tr>";
         }
         os << '\n';
     }

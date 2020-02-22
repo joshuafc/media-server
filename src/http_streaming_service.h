@@ -23,6 +23,7 @@
 #include "ts_queue.h"
 #include <ifaddrs.h>
 #include <memory>       // std::shared_ptr
+#include "static_web_tools.h"
 
 // Convert RTMP stream to progressive downloading of FLV files.
 class FlvDownloader : public brpc::RtmpStreamBase {
@@ -107,14 +108,11 @@ public:
                              const HttpRequest*,
                              HttpResponse*,
                              google::protobuf::Closure* done);
-    void play_hls(google::protobuf::RpcController* cntl_base,
-                  const HttpRequest*,
-                  HttpResponse*,
-                  google::protobuf::Closure* done);
-    void get_hls_min(google::protobuf::RpcController* cntl_base,
-                     const HttpRequest*,
-                     HttpResponse*,
-                     google::protobuf::Closure* done);
+
+    void player(google::protobuf::RpcController* cntl_base,
+                   const HttpRequest*,
+                   HttpResponse*,
+                   google::protobuf::Closure* done);
     void get_cdn_probe(google::protobuf::RpcController* cntl_base,
                        const HttpRequest*,
                        HttpResponse*,
@@ -132,6 +130,21 @@ friend class ProxyHttp;
     HttpStreamingServiceOptions _httpopt;
     std::unique_ptr<brpc::Channel> _proxy_http_channel;
     std::string _node_vip_with_port;
+    std::unique_ptr<StaticWebService> _static_web_service { StaticWebToolFactory::Create() };
+};
+
+class CompatibleServiceImpl : public CompatibleService
+{
+public:
+    explicit CompatibleServiceImpl(HttpStreamingServiceImpl *httpStreamService);
+
+    void hls(::google::protobuf::RpcController *controller, const ::HttpRequest *request, ::HttpResponse *response,
+             ::google::protobuf::Closure *done) override;
+
+    void live(::google::protobuf::RpcController *controller, const ::HttpRequest *request, ::HttpResponse *response,
+              ::google::protobuf::Closure *done) override;
+private:
+    HttpStreamingServiceImpl *_httpStreamService;
 };
 
 butil::ip_t get_host_public_ip();

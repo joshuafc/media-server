@@ -10,9 +10,8 @@ service HttpStreamingService {
   rpc get_media_playlist(HttpRequest) returns (HttpResponse);
   rpc get_master_playlist(HttpRequest) returns (HttpResponse);
   rpc get_crossdomain_xml(HttpRequest) returns (HttpResponse);
-  rpc play_hls(HttpRequest) returns (HttpResponse);
-  rpc get_hls_min(HttpRequest) returns (HttpResponse);
-  rpc get_cdn_probe(HttpRequest) returns (HttpResponse); 
+  rpc player(HttpRequest) returns (HttpResponse);
+  rpc get_cdn_probe(HttpRequest) returns (HttpResponse);
 };
 
 service MonitoringService {
@@ -20,3 +19,8 @@ service MonitoringService {
   rpc players(HttpRequest) returns (HttpResponse);
   rpc urls(HttpRequest) returns (HttpResponse);
 };
+
+service CompatibleService {
+  rpc hls(HttpRequest) returns (HttpResponse);
+  rpc live(HttpRequest) returns (HttpResponse);
+}

@@ -119,10 +119,10 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/src/delayed_log_base.cpp
     ${CMAKE_SOURCE_DIR}/src/event_log_manager.cpp
     ${CMAKE_SOURCE_DIR}/src/frame_queue.cpp
-    ${CMAKE_SOURCE_DIR}/src/hls_min_js.cpp
     ${CMAKE_SOURCE_DIR}/src/http_streaming_service.cpp
     ${CMAKE_SOURCE_DIR}/src/media_server.cpp
     ${CMAKE_SOURCE_DIR}/src/rtmp_forward_service.cpp
+    ${CMAKE_SOURCE_DIR}/src/static_web_tools.cpp
     ${CMAKE_SOURCE_DIR}/src/ts_queue.cpp
     ${CMAKE_SOURCE_DIR}/src/util.cpp)
 
